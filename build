@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Env Vars:
+# REGISTRY: name of the image registry/namespace to store the images
+#
+# NOTE: to run this you MUST set the REGISTRY environment variable to
+# your own image registry/namespace otherwise the `docker push` commands
+# will fail due to an auth failure. Which means, you also need to be logged
+# into that registry before you run it.
+
+set -ex
+if [[ $REGISTRY = "" ]];
+  echo "You must set the REGISTRY environment variable to the name of your docker registry."
+  exit 1
+fi
+
+# Build the image
+docker build -t ${REGISTRY}/cm-watcher ./watch
+
+# And push it
+docker push ${REGISTRY}/cm-watcher
+
+docker build -t ${REGISTRY}/cm-loader ./load
+docker push ${REGISTRY}/cm-loader
+
+docker build -t ${REGISTRY}/cm-defaulter ./watch-with-defaults
+docker push ${REGISTRY}/cm-defaulter
