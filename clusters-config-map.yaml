@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+data:
+  clusters.json: |
+    {
+      "cluster1": {
+        "endpoint": "https://foo.com"
+      },
+      "cluster2": {
+        "endpoint": "https://bar.com"
+      },
+      "cluster3": {
+        "endpoint": "https://foobar.com"
+      },
+      "cluster4": {
+        "endpoint": "https://free.willy"
+      },
+      "cluster5": {
+        "endpoint": "https://take.me.to.funkytown"
+      }
+    }
+  config.json: |
+    {
+      "current": {
+        "endpoint": "cluster1"
+      }
+    }
+metadata:
+  name: clusters-config-multiple-files
