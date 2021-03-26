@@ -20,6 +20,9 @@ docker build -t ${REGISTRY}/cm-watcher ./watch
 # And push it
 docker push ${REGISTRY}/cm-watcher
 
+docker build -t ${REGISTRY}/kn-watcher ./kn-watch
+docker push ${REGISTRY}/kn-watcher
+
 docker build -t ${REGISTRY}/cm-loader ./load
 docker push ${REGISTRY}/cm-loader
 
