@@ -36,7 +36,7 @@ func init() {
 func main() {
 	var (
 		currentEndpoint string
-		mutex           sync.Mutex
+		mutex           *sync.Mutex
 	)
 
 	// Let's make sure we don't forget to set a default
@@ -53,13 +53,9 @@ func main() {
 		panic("Unable to create our clientset")
 	}
 
-	watcher, err := clientset.CoreV1().ConfigMaps(namespace).Watch(context.TODO(),
-		metav1.SingleObject(metav1.ObjectMeta{Name: CM_NAME, Namespace: namespace}))
-	if err != nil {
-		panic("Unable to create watcher")
-	}
+	mutex = &sync.Mutex{}
 
-	go updateCurrentEndpoint(watcher.ResultChan(), &currentEndpoint, mutex)
+	go watchForChanges(clientset, namespace, &currentEndpoint, mutex)
 
 	http.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
 		mutex.Lock()
@@ -73,29 +69,46 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
-func updateCurrentEndpoint(eventChannel <-chan watch.Event, endpoint *string, mutex sync.Mutex) {
-	for event := range eventChannel {
-		switch event.Type {
-		case watch.Added:
-			fallthrough
-		case watch.Modified:
-			mutex.Lock()
-			// Update our endpoint
-			if updatedMap, ok := event.Object.(*corev1.ConfigMap); ok {
-				if endpointKey, ok := updatedMap.Data["current.target"]; ok {
-					if targetEndpoint, ok := updatedMap.Data[endpointKey]; ok {
-						*endpoint = targetEndpoint
+func watchForChanges(clientset *kubernetes.Clientset, namespace string, endpoint *string, mutex *sync.Mutex) {
+	for {
+		watcher, err := clientset.CoreV1().ConfigMaps(namespace).Watch(context.TODO(),
+			metav1.SingleObject(metav1.ObjectMeta{Name: CM_NAME, Namespace: namespace}))
+		if err != nil {
+			panic("Unable to create watcher")
+		}
+		updateCurrentEndpoint(watcher.ResultChan(), endpoint, mutex)
+	}
+}
+
+func updateCurrentEndpoint(eventChannel <-chan watch.Event, endpoint *string, mutex *sync.Mutex) {
+	for {
+		event, open := <-eventChannel
+		if open {
+			switch event.Type {
+			case watch.Added:
+				fallthrough
+			case watch.Modified:
+				mutex.Lock()
+				// Update our endpoint
+				if updatedMap, ok := event.Object.(*corev1.ConfigMap); ok {
+					if endpointKey, ok := updatedMap.Data["current.target"]; ok {
+						if targetEndpoint, ok := updatedMap.Data[endpointKey]; ok {
+							*endpoint = targetEndpoint
+						}
 					}
 				}
+				mutex.Unlock()
+			case watch.Deleted:
+				mutex.Lock()
+				// Fall back to the default value
+				*endpoint = DEFAULT_ENDPOINT
+				mutex.Unlock()
+			default:
+				// Do nothing
 			}
-			mutex.Unlock()
-		case watch.Deleted:
-			mutex.Lock()
-			// Fall back to the default value
-			*endpoint = DEFAULT_ENDPOINT
-			mutex.Unlock()
-		default:
-			// Do nothing
+		} else {
+			// If eventChannel is closed, it means the server has closed the connection
+			return
 		}
 	}
 }
